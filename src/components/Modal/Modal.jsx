@@ -1,51 +1,47 @@
 import PropTypes from 'prop-types';
-import { Component } from 'react';
+import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Overlay, ModalContent } from 'components/Modal/Modal.styled';
 
 const modalRoot = document.querySelector('#modal-root');
 
-export class Modal extends Component {
-    static propTypes = {
-        modalData: PropTypes.shape({
-          largeImageURL: PropTypes.string.isRequired,
-          tags: PropTypes.string.isRequired,
-        }),
-        onModalClose: PropTypes.func,
-      };
-    
-  componentDidMount() {
-    window.addEventListener('keydown', this.handleKeyDown);
-  }
+export const Modal = ({ modalData, onModalClose }) => {
+  const { largeImageURL, tags } = modalData;
 
-  componentWillUnmount() {
-    window.removeEventListener('keydown', this.handleBackdropeClick);
-  }
+  useEffect(() => {
+    const handleKeyDown = event => {
+      if (event.code === 'Escape') {
+        onModalClose();
+      }
+    };
 
-  handleKeyDown = event => {
-    if (event.code === `Escape`) {
-      this.props.onModalClose();
-    }
-  };
+    window.addEventListener('keydown', handleKeyDown);
 
-  handleBackdropeClick = event => {
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onModalClose]);
+
+  const handleBackdropClick = event => {
     if (event.target === event.currentTarget) {
-      this.props.onModalClose();
+      onModalClose();
     }
   };
 
-  render() {
-    const { largeImageURL, tags } = this.props.modalData;
+  return createPortal(
+    <Overlay onClick={handleBackdropClick}>
+      <ModalContent>
+        <img src={largeImageURL} alt={tags} />
+      </ModalContent>
+    </Overlay>,
+    modalRoot
+  );
+};
 
-    return createPortal(
-      <Overlay onClick={this.handleBackdropeClick}>
-        <ModalContent>
-          <img src={largeImageURL} alt={tags} />
-        </ModalContent>
-      </Overlay>,
-      modalRoot
-    );
-  }
-}
-
-
+Modal.propTypes = {
+  modalData: PropTypes.shape({
+    largeImageURL: PropTypes.string.isRequired,
+    tags: PropTypes.string.isRequired,
+  }),
+  onModalClose: PropTypes.func,
+};

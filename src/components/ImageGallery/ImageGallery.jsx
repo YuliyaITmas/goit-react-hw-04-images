@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { api } from 'components/services/getImages';
 
@@ -20,130 +20,102 @@ const Status = {
   REJECTED: 'rejected',
 };
 
-export class ImageGallery extends Component {
-  static propTypes = {
-    value: PropTypes.string.isRequired,
-  };
+export const ImageGallery = ({ value }) => {
+  const [query, setQuery] = useState('');
+  const [images, setImages] = useState([]);
+  const [error, setError] = useState(null);
+  const [status, setStatus] = useState(Status.IDLE);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [isShowModal, setIsShowModal] = useState(false);
+  const [modalData, setModalData] = useState({ img: '', tags: '' });
 
-  state = {
-    query: '',
-    images: [],
-    error: null,
-    status: Status.IDLE,
-    page: 1,
-    totalPages: 0,
+  
+  useEffect(() => {
+    if (!value) return;
 
-    isShowModal: false,
-    modalData: { img: '', tags: '' },
-  };
-  static getStateFromProps(nextProps, prevState) {
-    if (prevState.value !== nextProps.value) {
-      return { page: 1, query: nextProps.value };
+    if (query !== value) {
+      setStatus(Status.PENDING);
+      setImages([]);
+      setPage(1);
     }
-    return null;
-  }
-
-  componentDidUpdate(prevProps, prevState) {
-    const { page } = this.state;
-    const prevName = prevProps.value;
-    const nextName = this.props.value;
-    if (prevName !== nextName) {
-      this.setState({
-        status: Status.PENDING,
-        images: [],
-        page: 1,
+    api
+      .getImages(value, page)
+      .then(imagesData => {
+        setImages(images =>
+          page === 1 ? imagesData.hits : [...images, ...imagesData.hits]
+        );
+        setQuery(value);
+        setStatus(Status.RESOLVED);
+        setTotalPages(Math.floor(imagesData.totalHits / 12));
+      })
+      .catch(error => {
+        setError(error);
+        setStatus(Status.REJECTED);
       });
+  }, [value, query, page]);
 
-      api
-        .getImages(nextName, page)
-        .then(images => {
-          this.setState(prevState => ({
-            images:
-              page === 1 ? images.hits : [...prevState.images, ...images.hits],
-            query: nextName,
-
-            status: Status.RESOLVED,
-            totalPages: Math.floor(images.totalHits / 12),
-          }));
-        })
-        .catch(error => this.setState({ error, status: Status.REJECTED }));
-    }
-  }
-
-  handleLoadMore = event => {
+  const handleLoadMore = event => {
     event.preventDefault();
-    
-
-    const { value: query } = this.props;
-    this.setState(
-      prevState => ({ page: prevState.page + 1, query }),
-      () => {
-        api
-          .getImages(query, this.state.page)
-          .then(images => {
-            this.setState(prevState => ({
-              images: [...prevState.images, ...images.hits],
-              status: Status.RESOLVED,
-              totalPages: Math.floor(images.totalHits / 12),
-            }));
-          })
-          .catch(error => this.setState({ error, status: Status.REJECTED }));
-      }
-    );
+    setPage(page => page + 1);
   };
 
-  setModalData = modalData => {
-    this.setState({ modalData, isShowModal: true });
+  const openModalData = modalData => {
+    setModalData(modalData);
+    setIsShowModal(true);
   };
 
-  handleModalClose = () => {
-    this.setState({ isShowModal: false });
+  const handleModalClose = () => {
+    setIsShowModal(false);
   };
-  render() {
-    const { images, error, status, page, totalPages, isShowModal, modalData } =
-      this.state;
-    if (status === 'idle') {
-      return <InitialGallery message="Let's find some pictures..." />;
-    }
-    if (status === 'pending') {
-      return <Loader>Pictures are loading...</Loader>;
-    }
-    if (status === 'rejected') {
-      return <ErrorMesage picture={errorImage} message={error.message} />;
-    }
-    if (images.length === 0) {
-      return (
-        <ErrorMesage
-          picture={notFoundImage}
-          message={`Sorry, we couldn't find ${this.props.value}`}
-        />
-      );
-    }
-    if (status === 'resolved') {
-      return (
-        <>
-          <List>
-            {images.map(({ id, webformatURL, tags, largeImageURL }) => {
-              return (
-                <ImageGalleryItem
-                  key={id}
-                  webformatURL={webformatURL}
-                  tags={tags}
-                  largeImageURL={largeImageURL}
-                  handleClick={this.setModalData}
-                />
-              );
-            })}
-          </List>
 
-          {images.length > 0 && status !== 'pending' && page <= totalPages && (
-            <Button onClick={this.handleLoadMore}>Load More</Button>
-          )}
-          {isShowModal && (
-            <Modal modalData={modalData} onModalClose={this.handleModalClose} />
-          )}
-        </>
-      );
-    }
+  if (status === Status.IDLE) {
+    return <InitialGallery message="Let's find some pictures..." />;
   }
-}
+  if (status === Status.PENDING) {
+    return <Loader>Pictures are loading...</Loader>;
+  }
+  if (status === Status.REJECTED) {
+    return <ErrorMesage picture={errorImage} message={error.message} />;
+  }
+  if (images.length === 0) {
+    return (
+      <ErrorMesage
+        picture={notFoundImage}
+        message={`Sorry, we couldn't find ${value}`}
+      />
+    );
+  }
+  if (status === Status.RESOLVED) {
+    return (
+      <>
+        <List>
+          {images.map(({ id, webformatURL, tags, largeImageURL }) => {
+            return (
+              <ImageGalleryItem
+                key={id}
+                webformatURL={webformatURL}
+                tags={tags}
+                largeImageURL={largeImageURL}
+                handleClick={openModalData}
+              />
+            );
+          })}
+        </List>
+
+        {images.length > 0 &&
+          status !== Status.PENDING &&
+          page <= totalPages && (
+            <Button onClick={handleLoadMore}>Load More</Button>
+          )}
+        {isShowModal && (
+          <Modal modalData={modalData} onModalClose={handleModalClose} />
+        )}
+      </>
+    );
+  }
+};
+
+ImageGallery.propTypes = {
+  value: PropTypes.string.isRequired,
+};
